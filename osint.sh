@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# ----------------------------- #
+#   Made By Caden Finkelstein   #
+# ----------------------------- #
+
 GUM_CHOOSE_STYLE=""
 
 start_blackbird() {
