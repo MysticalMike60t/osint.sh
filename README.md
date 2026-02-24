@@ -1,3 +1,3 @@
 <div align="center">
-  <h1>OSINT.sh</h1>
+  <h3>OSINT.sh</h3>
 </div>
