@@ -518,6 +518,7 @@ start_blackbird() {
     local TYPE INSTALL_DIR
     [[ ! -z ${1:-} ]] && TYPE=$1
     INSTALL_DIR=$BLACKBIRD_INSTALL_DIR
+    
     type() {
         case "$TYPE" in
             "username")
@@ -555,7 +556,6 @@ start_blackbird() {
             "json") echo "--json" ;;
             "cancel") output ;;
         esac
-        printf "Outputs are stored in: %s/results" $INSTALL_DIR
     }
     verbose() {
         run_gum confirm "Run verbose?"
@@ -610,9 +610,9 @@ start_blackbird() {
     NSFW_ARG=$(nsfw) || cleanup
     EXTRA_ARG=$(extra_params) || cleanup
 
-    clear
+    echo "Outputs are stored in: $INSTALL_DIR/results"
     exec blackbird $TYPE_ARG $OUTPUT_ARG $VERBOSE_ARG $PROXY_ARG $NSFW_ARG $EXTRA_ARG
-    exit
+    exit 0
 }
 
 # ----------------------------------------- #
