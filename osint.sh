@@ -13,7 +13,8 @@ fi
 #               Bash env init               #
 # ----------------------------------------- #
 
-set -ebhmuo pipefail
+set -euo pipefail
+set +m
 
 # ----------------------------------------- #
 #             End Bash env init             #
@@ -23,8 +24,8 @@ set -ebhmuo pipefail
 #          Ask for admin privledges         #
 # ----------------------------------------- #
 
-if [ "$EUID" != 0 ]; then
-    sudo "$0" "$@"
+if [[ $EUID -ne 0 ]]; then
+    exec sudo "$0" "$@"
     exit $?
 fi
 
@@ -36,21 +37,40 @@ fi
 #         Entry Variable Definitions        #
 # ----------------------------------------- #
 
+# Basic Fast shit
+readonly ANSI_BLACK='\033[0;30m'
+readonly ANSI_RED='\033[0;31m'
+readonly ANSI_GREEN='\033[0;32m'
+readonly ANSI_ORANGE='\033[0;33m'
+readonly ANSI_BLUE='\033[0;34m'
+readonly ANSI_PURPLE='\033[0;35m'
+readonly ANSI_CYAN='\033[0;36m'
+readonly ANSI_LIGHT_GRAY='\033[0;37m'
+readonly ANSI_DARK_GRAY='\033[1;30m'
+readonly ANSI_LIGHT_RED='\033[1;31m'
+readonly ANSI_LIGHT_GREEN='\033[1;32m'
+readonly ANSI_YELLOW='\033[1;33m'
+readonly ANSI_LIGHT_BLUE='\033[1;34m'
+readonly ANSI_LIGHT_PURPLE='\033[1;35m'
+readonly ANSI_LIGHT_CYAN='\033[1;36m'
+readonly ANSI_WHITE='\033[1;37m'
+readonly ANSI_NC='\033[0m' 
+
 # Static strings
 readonly TITLE="OSINT.sh"
 
-# Version Definitions
-readonly BLACKBIRD_PYTHON_VERSION=3.14.3
-
 # OS / System info vars
 ACTUAL_USER="${SUDO_USER:-$USER}"
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 ERRORS=0
 VERBOSE=false
 LOG_FILE="./osint.sh.log"
+INSTALL_DIR="/home/$ACTUAL_USER/.local/share/osint.sh"
 LOCAL_INSTALL_BIN="/home/$ACTUAL_USER/.local/bin"
 BLACKBIRD_INSTALL_DIR="/home/$ACTUAL_USER/.local/share/blackbird"
 # Initial arg variable values
+SCRIPT_ARGS_INSTALL_DIR=$INSTALL_DIR
 SCRIPT_ARGS_CUSTOM_LOG_OUTPUT_ENABLED=false
 SCRIPT_ARGS_CUSTOM_LOG_OUTPUT_LOCATION=$LOG_FILE
 SCRIPT_ARGS_VERBOSE_ENABLED=false
@@ -65,13 +85,97 @@ export PATH="$LOCAL_INSTALL_BIN:$PATH"
 # ----------------------------------------- #
 
 # ----------------------------------------- #
+#          Bash Management Library          #
+# ----------------------------------------- #
+
+cleanup() {
+	unset use_python
+
+    echo -e "${ANSI_PURPLE}Bye Bye :3${ANSI_NC}"
+    pkill -KILL -- -$$ 2>/dev/null
+} >&2
+
+# ----------------------------------------- #
+#        End Bash Management Library        #
+# ----------------------------------------- #
+
+# ----------------------------------------- #
 #         System Management Library         #
 # ----------------------------------------- #
 
 GUM_CHOOSE_STYLE=""
 
+print() {
+    local TYPE COLOR
+    [[ ! -z ${1:-} ]] && TYPE=$1
+    [[ ! -z ${2:-} ]] && COLOR=$2
+    shift 2
+
+    print() {
+        local START
+        START=$1
+        shift 1
+        echo -e "${START}$*${ANSI_NC}"
+    }
+
+    case $TYPE in
+        color)
+            case $COLOR in
+                red)
+                    print $ANSI_RED "$*"
+                    ;;
+                orange)
+                    print $ANSI_ORANGE "$*"
+                    ;;
+                yellow)
+                    print $ANSI_YELLOW "$*"
+                    ;;
+                green)
+                    print $ANSI_GREEN "$*"
+                    ;;
+                cyan)
+                    print $ANSI_CYAN "$*"
+                    ;;
+                blue)
+                    print $ANSI_BLUE "$*"
+                    ;;
+                purple)
+                    print $ANSI_PURPLE "$*"
+                    ;;
+                white)
+                    print $ANSI_WHITE "$*"
+                    ;;
+                black)
+                    print $ANSI_BLACK "$*"
+                    ;;
+                light-red)
+                    print $ANSI_LIGHT_RED "$*"
+                    ;;
+                light-green)
+                    print $ANSI_LIGHT_GREEN "$*"
+                    ;;
+                light-cyan)
+                    print $ANSI_LIGHT_CYAN "$*"
+                    ;;
+                light-blue)
+                    print $ANSI_LIGHT_BLUE "$*"
+                    ;;
+                light-purple)
+                    print $ANSI_LIGHT_PURPLE "$*"
+                    ;;
+                light-gray)
+                    print $ANSI_LIGHT_GRAY "$*"
+                    ;;
+                dark-gray)
+                    print $ANSI_DARK_GRAY "$*"
+                    ;;
+            esac
+            ;;
+    esac
+}
+
 run_as_user() {
-    runuser --user $ACTUAL_USER -- bash -lic "$*"
+    runuser --user $ACTUAL_USER -- bash -lic "$* > /dev/null" > /dev/null
 }
 
 command_success() {
@@ -95,7 +199,7 @@ command_exists() {
 package_manager() {
     local TYPE PACKAGE PACKAGE_MANAGER
     [[ ! -z ${1:-} ]] && TYPE=$1
-    [[ -n $2 ]] && PACKAGE=$2
+    [[ ! -z ${2:-} ]] && PACKAGE=$2
 
     check() {
         if command_exists apt; then
@@ -247,13 +351,13 @@ use_python() {
 
     if command_exists pyenv; then
         export PATH="/home/$ACTUAL_USER/.pyenv/bin:$PATH"
-        eval "$(run_as_user pyenv init - bash)"
+        eval "$(run_as_user pyenv init - bash 2>/dev/null)"
         export PYENV_INSTALLER_SKIP_PROMPTS=1
     fi
 
     create_env() {
         if command_exists pyenv; then
-            run_as_user pyenv install -s 3.14.3
+            run_as_user pyenv install -s 3.14.3 2>/dev/null
 
             local PYTHON_BIN="/home/$ACTUAL_USER/.pyenv/versions/3.14.3/bin/python"
 
@@ -278,7 +382,7 @@ use_python() {
         [[ ! -z ${*:-} ]] && OPTIONS=$("./$1" "$@")
 
         if command_exists pyenv; then
-            run_as_user pyenv exec python $OPTIONS
+            run_as_user pyenv exec python $OPTIONS 2>/dev/null
         else
             if command_exists python3; then
                 python3 $OPTIONS
@@ -302,12 +406,19 @@ use_python() {
             ;;
     esac
 }
+export -f use_python
 
 run_gum() {
-    local TYPE OPTIONS
-    [[ ! -z ${1:-} ]] && TYPE=$1
-    shift 1
-    [[ ! -z ${*:-} ]] && OPTIONS=$*
+    local TYPE
+    TYPE="$1"
+    shift
+
+    local OPTIONS=("$@")
+
+    export GUM_INPUT_CURSOR_FOREGROUND="#FF0"
+    export GUM_INPUT_PROMPT_FOREGROUND="#0FF"
+    export GUM_INPUT_PROMPT="* "
+    export GUM_INPUT_WIDTH=80
 
     confirm() {
         if command_exists gum; then
@@ -324,7 +435,7 @@ run_gum() {
         if command_exists gum; then
             if [[ ! -z ${*:-} ]]; then
                 local RESTARGS
-                RESTARGS=$*
+                RESTARGS="$@"
                 gum choose $GUM_CHOOSE_STYLE $RESTARGS && return 0 || return 1
             # else
                 # return 1
@@ -333,42 +444,59 @@ run_gum() {
             # return 1
         fi
     }
+    spin() {
+        if command_exists gum; then
+            local SPINNER_TITLE="$1"
+            shift
+
+            gum spin --spinner dot --title "$SPINNER_TITLE" -- "$@"
+        else
+            "$@"
+        fi
+    }
 
     case $TYPE in
         confirm)
             confirm "${OPTIONS[@]}"
             ;;
         choose)
-            choose $OPTIONS
+            choose "${OPTIONS[@]}"
+            ;;
+        spin)
+            spin "${OPTIONS[@]}"
             ;;
     esac
 }
 
 install_blackbird() {
     while true; do
+        clear
         if ! command_exists git; then
-            install pkgmgr git
+            local temp_command=$(install pkgmgr git)
+            run_gum spin "Installing git via $PACKAGE_MANAGER" "$temp_command"
+            unset temp_command
             continue
         fi
         local current_dir
         current_dir=$(pwd)
-        rm -rf $BLACKBIRD_INSTALL_DIR
-        rm -f $LOCAL_INSTALL_BIN/blackbird
-        rm -f /etc/environment.d/99-blackbird.conf
+        rm -rf $BLACKBIRD_INSTALL_DIR > /dev/null
+        rm -f $LOCAL_INSTALL_BIN/blackbird > /dev/null
+        rm -f /etc/environment.d/99-blackbird.conf > /dev/null
         if $VERBOSE; then
-            mkdir -pv "$BLACKBIRD_INSTALL_DIR" "$LOCAL_INSTALL_BIN"
-            git -v clone https://github.com/p1ngul1n0/blackbird "$BLACKBIRD_INSTALL_DIR"
+            mkdir -pv "$BLACKBIRD_INSTALL_DIR" "$LOCAL_INSTALL_BIN" > /dev/null
+            run_gum spin "Cloning Blackbird repo..." git -v clone https://github.com/p1ngul1n0/blackbird "$BLACKBIRD_INSTALL_DIR"
         else
-            mkdir -p "$BLACKBIRD_INSTALL_DIR" "$LOCAL_INSTALL_BIN"
-            git clone https://github.com/p1ngul1n0/blackbird "$BLACKBIRD_INSTALL_DIR"
+            mkdir -p "$BLACKBIRD_INSTALL_DIR" "$LOCAL_INSTALL_BIN" > /dev/null
+            run_gum spin "Cloning Blackbird repo..." git clone https://github.com/p1ngul1n0/blackbird "$BLACKBIRD_INSTALL_DIR"
         fi
         cd $BLACKBIRD_INSTALL_DIR
-        use_python createenv
-        source "$BLACKBIRD_INSTALL_DIR/.venv/bin/activate" && pip install -r requirements.txt
-        printf "PATH=\"%s:\$PATH\"" $BLACKBIRD_INSTALL_DIR:$LOCAL_INSTALL_BIN >> /etc/environment.d/99-blackbird.conf
-        printf "#!/usr/bin/env bash\nset -euo pipefail\ncurrent_dir=\$(pwd)\nWRKDIR=\"%s\"\nVENV=\"\$WRKDIR/.venv\"\nSCRIPT=\"\$WRKDIR/blackbird.py\"\nif [[ ! -d \"\$VENV\" ]]; then\necho \"Error: Virtual environment not found at \$VENV\"\nexit 1\nfi\nsource \"\$VENV/bin/activate\"\ncd \"\$WRKDIR\"\npython \"\$SCRIPT\" \"\$@\"\ndeactivate\ncd \$current_dir" $BLACKBIRD_INSTALL_DIR >> $LOCAL_INSTALL_BIN/blackbird
-        chown $ACTUAL_USER:$ACTUAL_USER $LOCAL_INSTALL_BIN/blackbird
-        chmod +x $LOCAL_INSTALL_BIN/blackbird
+        local temp_command=$(use_python createenv)
+        run_gum spin "Creating Python ENV..." $temp_command
+        unset temp_command
+        run_gum spin "Installing Python requirements..." bash -c "source '$BLACKBIRD_INSTALL_DIR/.venv/bin/activate' && pip install -r requirements.txt"
+        run_gum spin "Adding files to PATH..." printf "PATH=\"%s:\$PATH\"" $BLACKBIRD_INSTALL_DIR:$LOCAL_INSTALL_BIN >> /etc/environment.d/99-blackbird.conf
+        run_gum spin "Installing to local bin..." printf "#!/usr/bin/env bash\nset -euo pipefail\ncurrent_dir=\$(pwd)\nWRKDIR=\"%s\"\nVENV=\"\$WRKDIR/.venv\"\nSCRIPT=\"\$WRKDIR/blackbird.py\"\nif [[ ! -d \"\$VENV\" ]]; then\necho \"Error: Virtual environment not found at \$VENV\"\nexit 1\nfi\nsource \"\$VENV/bin/activate\"\ncd \"\$WRKDIR\"\npython \"\$SCRIPT\" \"\$@\"\ndeactivate\ncd \$current_dir" $BLACKBIRD_INSTALL_DIR >> $LOCAL_INSTALL_BIN/blackbird
+        run_gum spin "Setting user permissions..." bash -c "chown $ACTUAL_USER:$ACTUAL_USER $LOCAL_INSTALL_BIN/blackbird && chmod +x $LOCAL_INSTALL_BIN/blackbird"
         cd $current_dir
 
         break
@@ -404,7 +532,7 @@ start_blackbird() {
                 "json") echo "--json" ;;
                 "cancel") output ;;
             esac
-            echo "Outputs are stored in: $INSTALL_DIR/results" 1>&3
+            printf "Outputs are stored in: %s/results" $INSTALL_DIR
         fi
     }
     verbose() {
@@ -437,15 +565,15 @@ start_blackbird() {
     fi
 
     local TYPE_ARG OUTPUT_ARG VERBOSE_ARG PROXY_ARG NSFW_ARG EXTRA_ARG
-    TYPE_ARG=$(type)
-    OUTPUT_ARG=$(output)
-    VERBOSE_ARG=$(verbose)
-    PROXY_ARG=$(proxy)
-    NSFW_ARG=$(nsfw)
-    EXTRA_ARG=$(extra_params)
+    TYPE_ARG=$(type) || cleanup
+    OUTPUT_ARG=$(output) || cleanup
+    VERBOSE_ARG=$(verbose) || cleanup
+    PROXY_ARG=$(proxy) || cleanup
+    NSFW_ARG=$(nsfw) || cleanup
+    EXTRA_ARG=$(extra_params) || cleanup
 
     clear
-    blackbird $TYPE_ARG $OUTPUT_ARG $VERBOSE_ARG $PROXY_ARG $NSFW_ARG $EXTRA_ARG
+    exec blackbird $TYPE_ARG $OUTPUT_ARG $VERBOSE_ARG $PROXY_ARG $NSFW_ARG $EXTRA_ARG
     exit
 }
 
@@ -458,12 +586,21 @@ start_blackbird() {
 # ----------------------------------------- #
 
 usage() {
-    echo "Usage: $0 [OPTIONS]"
-    echo "Options:"
-    echo " help, -h, --help      Display this help message"
-    echo " -v, --verbose         Enable verbose mode"
-    echo " -n, --no-install      Don't install non-installed packages and/or programs"
-    echo " --log-output          Specify location of log output file"
+    local DISPLAY_NAME
+    DISPLAY_NAME=$(print color light-purple ${0#$SCRIPT_DIR/})
+
+    echo -e "Usage: $DISPLAY_NAME $(print color yellow "[")OPTIONS$(print color yellow "]")"
+    echo -e "Options:"
+    echo -e " $(print color light-cyan "help"), $(print color light-cyan "-h"), $(print color light-cyan "--help")      Display this help message"
+    echo -e " $(print color light-cyan "-v"), $(print color light-cyan "--verbose")         Enable verbose mode"
+    echo -e " $(print color light-cyan "init"), $(print color light-cyan "-i"), $(print color light-cyan "--init")      Initialize $(print color light-purple "$TITLE") by adding it to $(print color light-blue "PATH"), and installing"
+    echo -e " $(print color light-cyan "--insane-verbose")      Verbose on everything possible "
+    echo -e " $(print color light-cyan "-n"), $(print color light-cyan "--no-install")      Don't install non-installed packages and/or programs"
+    echo -e " $(print color light-cyan "-l"), $(print color light-cyan "--log")             Enable logs"
+    echo -e " $(print color light-cyan "--log-output")          Specify location of log output file"
+    echo -e " $(print color light-cyan "--blackbird-dir")       Specify directory of $(print color light-green "Blackbird") installation"
+    echo -e " $(print color light-cyan "--local-install-bin")   Specify where you want the bin files to be placed"
+    echo -e " $(print color light-cyan "--install-dir")         Specify installation directory for $DISPLAY_NAME"
 }
 
 has_argument() {
@@ -512,6 +649,14 @@ install() {
     esac
 }
 
+add_self_to_path() {
+    mkdir -p "$INSTALL_DIR"
+    cp "$SCRIPT_DIR/osint.sh" "$INSTALL_DIR/osint"
+    chown $ACTUAL_USER:$ACTUAL_USER "$INSTALL_DIR/osint"
+    chmod +x "$INSTALL_DIR/osint"
+    printf "PATH=\"%s:\$PATH\"" $INSTALL_DIR:$LOCAL_INSTALL_BIN >> /etc/environment.d/99-osint.sh.conf
+}
+
 # ----------------------------------------- #
 #             End Custom Library            #
 # ----------------------------------------- #
@@ -524,12 +669,13 @@ while [ $# -gt 0 ]; do
   case $1 in
     help | -h | --help)
         usage
+        exit 0
         ;;
     -l | --log)
         SCRIPT_ARGS_LOG_ENABLED=true ;;
     --log-output)
         if [ -z "$2" ] || [[ "$2" == -* ]]; then
-            echo "File not specified." >&2
+            print color red "File not specified." >&2
             usage
             exit 1
         fi
@@ -558,12 +704,20 @@ while [ $# -gt 0 ]; do
     --local-install-bin)
         SCRIPT_ARGS_LOCAL_INSTALL_BIN=$2
         ;;
+    --install-dir)
+        SCRIPT_ARGS_INSTALL_DIR=$2
+        INSTALL_DIR=$2
+        ;;
     --blackbird-dir)
         SCRIPT_ARGS_BLACKBIRD_INSTALL_DIR=$2
         BLACKBIRD_INSTALL_DIR=$2
         ;;
+    init | -i | --init)
+        add_self_to_path
+        exit 0
+        ;;
     *)
-        echo "Invalid option: $1" >&2
+        echo "$(print color red "Invalid option:") $1" >&2
         usage
         exit 1
         ;;
@@ -584,7 +738,7 @@ username_menu() {
         if command_exists gum; then
             local choice options
             options=("Blackbird" "Back")
-            choice=$(gum choose $GUM_CHOOSE_STYLE "${options[@]}")
+            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}" || cleanup)
             clear
             case $choice in
                 "Blackbird") start_blackbird "username" ;;
@@ -599,7 +753,7 @@ email_menu() {
         if command_exists gum; then
             local choice options
             options=("Blackbird" "Back")
-            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}")
+            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}" || cleanup)
             clear
             case $choice in
                 "Blackbird") start_blackbird "email" ;;
@@ -610,11 +764,13 @@ email_menu() {
 }
 
 main_menu() {
+    local PACKAGE_MANAGER
+    PACKAGE_MANAGER=$(package_manager check)
     while true; do
         if command_exists gum; then
             local choice options
             local options=("Username" "Email" "Exit")
-            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}")
+            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}" || cleanup)
             clear
             case $choice in
                 "Username") username_menu ;;
@@ -685,8 +841,6 @@ main_menu() {
 clear
 
 main_menu
-
-return $ERRORS
 
 # ----------------------------------------- #
 #                  End Init                 #
