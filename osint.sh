@@ -371,8 +371,9 @@ install_blackbird() {
         chmod +x $LOCAL_INSTALL_BIN/blackbird
         cd $current_dir
 
-        return 0
+        break
     done
+    return 0
 }
 
 start_blackbird() {
