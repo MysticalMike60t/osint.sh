@@ -13,7 +13,7 @@ fi
 #               Bash env init               #
 # ----------------------------------------- #
 
-set -euo pipefail
+set -uo pipefail
 set +m
 
 # ----------------------------------------- #
@@ -89,10 +89,12 @@ export PATH="$LOCAL_INSTALL_BIN:$PATH"
 # ----------------------------------------- #
 
 cleanup() {
+    clear
+
 	unset use_python
 
     echo -e "${ANSI_PURPLE}Bye Bye :3${ANSI_NC}"
-    pkill -KILL -- -$$ 2>/dev/null
+    kill -INT $$ 2>/dev/null
 } >&2
 
 # ----------------------------------------- #
@@ -342,6 +344,76 @@ package_manager() {
 #              Program Library              #
 # ----------------------------------------- #
 
+run_gum() {
+    local TYPE
+    TYPE="$1"
+    shift
+
+    local OPTIONS=("$@")
+
+    export GUM_INPUT_CURSOR_FOREGROUND="#FF0"
+    export GUM_INPUT_PROMPT_FOREGROUND="#0FF"
+    export GUM_INPUT_PROMPT="* "
+    export GUM_INPUT_WIDTH=80
+
+    confirm() {
+        if command_exists gum; then
+            if [[ ! -z ${1:-} ]]; then
+                gum confirm "$@" && return 0 || return 1
+            # else
+                gum confirm && return 0 || return 1
+            fi
+        # else
+            # return 1
+        fi
+    }
+    choose() {
+        if command_exists gum; then
+            if [[ ! -z ${*:-} ]]; then
+                local RESTARGS
+                RESTARGS="$@"
+                gum choose $GUM_CHOOSE_STYLE $RESTARGS && return 0 || return 1
+            # else
+                # return 1
+            fi
+        # else
+            # return 1
+        fi
+    }
+    spin() {
+        if command_exists gum; then
+            local SPINNER_TITLE="$1"
+            shift
+
+            gum spin --spinner points --title "$SPINNER_TITLE" -- "$@"
+        else
+            "$@"
+        fi
+    }
+    internet_spin() {
+        if command_exists gum; then
+            local SPINNER_TITLE="$1"
+            shift
+
+            gum spin --spinner globe --title "$SPINNER_TITLE" -- "$@"
+        else
+            "$@"
+        fi
+    }
+
+    case $TYPE in
+        confirm)
+            confirm "${OPTIONS[@]}"
+            ;;
+        choose)
+            choose "${OPTIONS[@]}"
+            ;;
+        spin)
+            spin "${OPTIONS[@]}"
+            ;;
+    esac
+}
+
 use_python() {
     local TYPE FILENAME REST
     [[ ! -z ${1:-} ]] && TYPE=$1
@@ -406,67 +478,6 @@ use_python() {
             ;;
     esac
 }
-export -f use_python
-
-run_gum() {
-    local TYPE
-    TYPE="$1"
-    shift
-
-    local OPTIONS=("$@")
-
-    export GUM_INPUT_CURSOR_FOREGROUND="#FF0"
-    export GUM_INPUT_PROMPT_FOREGROUND="#0FF"
-    export GUM_INPUT_PROMPT="* "
-    export GUM_INPUT_WIDTH=80
-
-    confirm() {
-        if command_exists gum; then
-            if [[ ! -z ${1:-} ]]; then
-                gum confirm "$@" && return 0 || return 1
-            # else
-                gum confirm && return 0 || return 1
-            fi
-        # else
-            # return 1
-        fi
-    }
-    choose() {
-        if command_exists gum; then
-            if [[ ! -z ${*:-} ]]; then
-                local RESTARGS
-                RESTARGS="$@"
-                gum choose $GUM_CHOOSE_STYLE $RESTARGS && return 0 || return 1
-            # else
-                # return 1
-            fi
-        # else
-            # return 1
-        fi
-    }
-    spin() {
-        if command_exists gum; then
-            local SPINNER_TITLE="$1"
-            shift
-
-            gum spin --spinner dot --title "$SPINNER_TITLE" -- "$@"
-        else
-            "$@"
-        fi
-    }
-
-    case $TYPE in
-        confirm)
-            confirm "${OPTIONS[@]}"
-            ;;
-        choose)
-            choose "${OPTIONS[@]}"
-            ;;
-        spin)
-            spin "${OPTIONS[@]}"
-            ;;
-    esac
-}
 
 install_blackbird() {
     while true; do
@@ -490,8 +501,7 @@ install_blackbird() {
             run_gum spin "Cloning Blackbird repo..." git clone https://github.com/p1ngul1n0/blackbird "$BLACKBIRD_INSTALL_DIR"
         fi
         cd $BLACKBIRD_INSTALL_DIR
-        local temp_command=$(use_python createenv)
-        run_gum spin "Creating Python ENV..." $temp_command
+        use_python createenv
         unset temp_command
         run_gum spin "Installing Python requirements..." bash -c "source '$BLACKBIRD_INSTALL_DIR/.venv/bin/activate' && pip install -r requirements.txt"
         run_gum spin "Adding files to PATH..." printf "PATH=\"%s:\$PATH\"" $BLACKBIRD_INSTALL_DIR:$LOCAL_INSTALL_BIN >> /etc/environment.d/99-blackbird.conf
@@ -513,49 +523,77 @@ start_blackbird() {
             "username")
                 local value
                 value=$(gum input --placeholder "What username?")
+                if [[ -z $value ]]; then
+                    cleanup
+                fi
                 echo "--username $value" ;;
             "email")
                 local value
                 value=$(gum input --placeholder "What email?")
+                if [[ -z $value ]]; then
+                    cleanup
+                fi
                 echo "--email $value" ;;
             *)
                 echo "" ;;
         esac
     }
     output() {
-        if run_gum confirm "Specify Output?"; then
-            local choice
-            choice=$(gum choose $GUM_CHOOSE_STYLE "csv" "pdf" "json" "cancel")
-            case "$choice" in
-                "csv") echo "--csv" ;;
-                "pdf") echo "--pdf" ;;
-                "json") echo "--json" ;;
-                "cancel") output ;;
-            esac
-            printf "Outputs are stored in: %s/results" $INSTALL_DIR
-        fi
+        run_gum confirm "Specify Output?"
+        case $? in
+            0) ;;
+            1) return 0 ;;
+            130) return 130 ;;
+        esac
+
+        local choice
+        choice=$(gum choose $GUM_CHOOSE_STYLE "csv" "pdf" "json" "cancel") || return 130
+
+        case "$choice" in
+            "csv") echo "--csv" ;;
+            "pdf") echo "--pdf" ;;
+            "json") echo "--json" ;;
+            "cancel") output ;;
+        esac
+        printf "Outputs are stored in: %s/results" $INSTALL_DIR
     }
     verbose() {
-        if run_gum confirm "Run verbose?"; then
-            echo "--verbose"
-        fi
+        run_gum confirm "Run verbose?"
+        case $? in
+            0) ;;
+            1) return 0 ;;
+            130) return 130 ;;
+        esac
+        echo "--verbose"
     }
     proxy() {
-        if run_gum confirm "Use proxy?"; then
-            local value
-            value=$(gum input --placeholder "Proxy URL?")
-            echo "--proxy $value"
-        fi
+        run_gum confirm "Use proxy?"
+        case $? in
+            0) ;;
+            1) return 0 ;;
+            130) return 130 ;;
+        esac
+        local value
+        value=$(gum input --placeholder "Proxy URL?") || return 130
+        echo "--proxy $value"
     }
     nsfw() {
-        if run_gum confirm "Remove NSFW results?"; then
-            echo "--no-nsfw"
-        fi
+        run_gum confirm "Remove NSFW results?"
+        case $? in
+            0) ;;
+            1) return 0 ;;
+            130) return 130 ;;
+        esac
+        echo "--no-nsfw"
     }
     extra_params() {
-        if run_gum confirm "Add extra parameters?"; then
-            gum input --placeholder "Enter extra parameters"
-        fi
+        run_gum confirm "Add extra parameters?"
+        case $? in
+            0) ;;
+            1) return 0 ;;
+            130) return 130 ;;
+        esac
+        gum input --placeholder "Enter extra parameters" || return 130
     }
 
     if [[ ! -d $INSTALL_DIR ]] || [[ ! -f $LOCAL_INSTALL_BIN/blackbird ]] || [[ ! -f /etc/environment.d/99-blackbird.conf ]]; then
@@ -738,7 +776,7 @@ username_menu() {
         if command_exists gum; then
             local choice options
             options=("Blackbird" "Back")
-            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}" || cleanup)
+            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}") || cleanup
             clear
             case $choice in
                 "Blackbird") start_blackbird "username" ;;
@@ -753,7 +791,7 @@ email_menu() {
         if command_exists gum; then
             local choice options
             options=("Blackbird" "Back")
-            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}" || cleanup)
+            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}") || cleanup
             clear
             case $choice in
                 "Blackbird") start_blackbird "email" ;;
@@ -770,7 +808,7 @@ main_menu() {
         if command_exists gum; then
             local choice options
             local options=("Username" "Email" "Exit")
-            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}" || cleanup)
+            choice=$(run_gum choose $GUM_CHOOSE_STYLE "${options[@]}") || cleanup
             clear
             case $choice in
                 "Username") username_menu ;;
