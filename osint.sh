@@ -91,8 +91,6 @@ export PATH="$LOCAL_INSTALL_BIN:$PATH"
 cleanup() {
     clear
 
-	unset use_python
-
     echo -e "${ANSI_PURPLE}Bye Bye :3${ANSI_NC}"
     kill -INT $$ 2>/dev/null
 } >&2
@@ -856,14 +854,11 @@ main_menu() {
                 esac
             }
             echo "Gum is not installed. You need it to use this program."
-            echo "Do you want to install it?"
-            select strictreply in "Yes" "No"; do
-                relaxedreply=${strictreply:-$REPLY}
-                case $relaxedreply in
-                    Yes | yes | y ) install_gum ; break ;;
-                    No  | no  | n ) break ;;
-                esac
-            done
+            read -p "Do you want to install it? Type y/n?" yesorno
+            case "$yesorno" in
+                    y* | Y*)  install_gum ;;
+                    n* | N*)  echo "You need to install gum."; exit 1 ;;
+            esac
         fi
     done
 }
