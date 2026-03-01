@@ -64,17 +64,17 @@ ACTUAL_USER="${SUDO_USER:-$USER}"
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 ERRORS=0
-VERBOSE=false
+VERBOSE=1
 LOG_FILE="./osint.sh.log"
 INSTALL_DIR="/home/$ACTUAL_USER/.local/share/osint.sh"
 LOCAL_INSTALL_BIN="/home/$ACTUAL_USER/.local/bin"
 BLACKBIRD_INSTALL_DIR="/home/$ACTUAL_USER/.local/share/blackbird"
 # Initial arg variable values
 SCRIPT_ARGS_INSTALL_DIR=$INSTALL_DIR
-SCRIPT_ARGS_CUSTOM_LOG_OUTPUT_ENABLED=false
+SCRIPT_ARGS_CUSTOM_LOG_OUTPUT_ENABLED=1
 SCRIPT_ARGS_CUSTOM_LOG_OUTPUT_LOCATION=$LOG_FILE
-SCRIPT_ARGS_VERBOSE_ENABLED=false
-SCRIPT_ARGS_NO_INSTALL_ENABLED=false
+SCRIPT_ARGS_VERBOSE_ENABLED=1
+SCRIPT_ARGS_NO_INSTALL_ENABLED=1
 SCRIPT_ARGS_BLACKBIRD_INSTALL_DIR=$BLACKBIRD_INSTALL_DIR
 SCRIPT_ARGS_LOCAL_INSTALL_BIN=$LOCAL_INSTALL_BIN
 
@@ -106,21 +106,61 @@ cleanup() {
 GUM_CHOOSE_STYLE=""
 
 print() {
-    local TYPE COLOR
+    local TYPE OPTION1 PRESET
     [[ ! -z ${1:-} ]] && TYPE=$1
-    [[ ! -z ${2:-} ]] && COLOR=$2
+    [[ ! -z ${2:-} ]] && OPTION1=$2
     shift 2
 
     print() {
-        local START
+        local START PRESET
         START=$1
         shift 1
-        echo -e "${START}$*${ANSI_NC}"
+        [[ ! -z ${2:-} ]] && PRESET=$2 && shift 1
+        case $PRESET in
+            error)
+                error 
+                ;;
+            *)
+                echo -e "${START}$*${ANSI_NC}"
+                ;;
+        esac
     }
+
+    error() {
+        local TYPE LAYER
+        TYPE=$1
+        shift 1
+        [[ ! -z ${2:-} ]] && LAYER=$2
+        [[ ! -z ${2:-} ]] && shift 2
+        case $TYPE in
+            simple)
+                case $LAYER in
+                    1)
+                        echo -e "${ANSI_LIGHT_RED}-[!]  $*  [!]-${ANSI_NC}"
+                        ;;
+                    2)
+                        echo -e "${ANSI_LIGHT_RED}--[!]  $*  [!]--${ANSI_NC}"
+                        ;;
+                    3)
+                        echo -e "${ANSI_LIGHT_RED}---[!]  $*  [!]---${ANSI_NC}"
+                        ;;
+                    4)
+                        echo -e "${ANSI_LIGHT_RED}----[!]  $*  [!]----${ANSI_NC}"
+                        ;;
+                    5)
+                        echo -e "${ANSI_LIGHT_RED}-----[!]  $*  [!]-----${ANSI_NC}"
+                        ;;
+                    *)
+                        echo -e "${ANSI_LIGHT_RED}[!]  $*  [!]${ANSI_NC}"
+                        ;;
+                esac
+                ;;
+        esac
+        }
 
     case $TYPE in
         color)
-            case $COLOR in
+            case $OPTION1 in
                 red)
                     print $ANSI_RED "$*"
                     ;;
@@ -171,6 +211,9 @@ print() {
                     ;;
             esac
             ;;
+            error)
+                error simple "$OPTION1" "$@"
+                ;;
     esac
 }
 
@@ -690,7 +733,8 @@ add_self_to_path() {
     cp "$SCRIPT_DIR/osint.sh" "$INSTALL_DIR/osint"
     chown $ACTUAL_USER:$ACTUAL_USER "$INSTALL_DIR/osint"
     chmod +x "$INSTALL_DIR/osint"
-    printf "PATH=\"%s:\$PATH\"" $INSTALL_DIR:$LOCAL_INSTALL_BIN >> /etc/environment.d/99-osint.sh.conf
+    # FIXME: printf "PATH=\"%s:\$PATH\"" $INSTALL_DIR:$LOCAL_INSTALL_BIN >> /etc/environment.d/99-osint.sh.conf
+    printf "export PATH=\"%s:\$PATH\"" $INSTALL_DIR:$LOCAL_INSTALL_BIN >> "/home/$ACTUAL_USER/.bashrc"
 }
 
 # ----------------------------------------- #
@@ -708,16 +752,16 @@ while [ $# -gt 0 ]; do
         exit 0
         ;;
     -l | --log)
-        SCRIPT_ARGS_LOG_ENABLED=true ;;
+        SCRIPT_ARGS_LOG_ENABLED=0 ;;
     --log-output)
         if [ -z "$2" ] || [[ "$2" == -* ]]; then
             print color red "File not specified." >&2
             usage
             exit 1
         fi
-        SCRIPT_ARGS_CUSTOM_LOG_OUTPUT_ENABLED=true
+        SCRIPT_ARGS_CUSTOM_LOG_OUTPUT_ENABLED=0
 
-        if [ "$SCRIPT_ARGS_LOG_ENABLED" = true ]; then
+        if [ "$SCRIPT_ARGS_LOG_ENABLED" = 0 ]; then
             SCRIPT_ARGS_CUSTOM_LOG_OUTPUT_LOCATION="$2"
             LOG_FILE="$2"
         fi
@@ -726,16 +770,16 @@ while [ $# -gt 0 ]; do
         continue
         ;;
     -v | --verbose)
-        SCRIPT_ARGS_VERBOSE_ENABLED=true
-        VERBOSE=true
+        SCRIPT_ARGS_VERBOSE_ENABLED=0
+        VERBOSE=0
         verbose
         ;;
     --insane-verbose)
-        SCRIPT_ARGS_INSANE_VERBOSE_ENABLED=true
+        SCRIPT_ARGS_INSANE_VERBOSE_ENABLED=0
         insane_verbose
         ;;
     -n | --no-install)
-        SCRIPT_ARGS_NO_INSTALL_ENABLED=true
+        SCRIPT_ARGS_NO_INSTALL_ENABLED=0
         ;;
     --local-install-bin)
         SCRIPT_ARGS_LOCAL_INSTALL_BIN=$2
@@ -815,39 +859,52 @@ main_menu() {
             esac
         else
             install_gum() {
+                $VERBOSE && echo "Installing gum"
                 case $PACKAGE_MANAGER in
                     apt)
+                        $VERBOSE && echo "-> Using apt..."
                         mkdir -p /etc/apt/keyrings
                         curl -fsSL https://repo.charm.sh/apt/gpg.key | gpg --dearmor -o /etc/apt/keyrings/charm.gpg
                         echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | tee /etc/apt/sources.list.d/charm.list
                         install pkgmgr gum
                         ;;
                     yum)
+                        $VERBOSE && echo "-> Using yum"
                         install pkgmgr gum
                         ;;
                     zypper)
+                        $VERBOSE && echo "-> Using zypper"
                         install pkgmgr gum
                         ;;
                     dnf)
+                        $VERBOSE && echo "-> Using dnf"
                         install pkgmgr gum
                         ;;
                     nix-env)
+                        $VERBOSE && echo "-> Using nix-env"
                         install pkgmgr nixpkgs.gum
                         ;;
                     pacman)
+                        $VERBOSE && echo "-> Using pacman"
                         install pkgmgr gum
                         ;;
                     flox)
+                        $VERBOSE && echo "-> Using flox"
                         install pkgmgr gum
                         ;;
                     *)
+                        $VERBOSE && print color light-blue "-i]  Failed to use basic package managers, trying other ones...  [i-"
                         if command_exists brew; then
+                            $VERBOSE && echo "-> Using brew"
                             brew install gum
                         elif command_exists go; then
+                            $VERBOSE && echo "-> Using go"
                             go install github.com/charmbracelet/gum@latest
                         else
-                            echo "error can't install gum :("
+                            $VERBOSE && print error simple 1 "Failed to install gum."
+                            print error simple 0 "error can't install gum :("
                             echo "Install from here: https://github.com/charmbracelet/gum"
+                            $VERBOSE && print error simple 0 "Exiting with error code 1..."
                             exit 1;
                         fi
                         ;;
