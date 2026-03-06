@@ -1,0 +1,3 @@
+remove_sh=true
+# install_path=/home/admin/.local/bin
+build_output_folder=./dist
