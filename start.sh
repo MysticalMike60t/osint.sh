@@ -54,12 +54,12 @@ fi
 #        End Ask for admin privledges       #
 # ----------------------------------------- #
 
-# --> GENERATED CODE <-- #
-
 # OS / System info vars
 readonly OSINTSH_ACTUAL_USER="${SUDO_USER:-$USER}"; export OSINTSH_ACTUAL_USER
 readonly OSINTSH_SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ); export OSINTSH_SCRIPT_DIR
 readonly OSINTSH_LIB_DIR="$OSINTSH_SCRIPT_DIR/lib"; export OSINTSH_LIB_DIR
+
+# --> GENERATED CODE <-- #
 
 shopt -s globstar
 for __script_path in $OSINTSH_LIB_DIR/**/*.lib.sh; do
